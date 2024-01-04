@@ -1,0 +1,1 @@
+mpirun -np 4 --oversubscribe xterm -fa 'Monospace' -fs 14 -hold -e Add2VectorInt-MPI -r 10

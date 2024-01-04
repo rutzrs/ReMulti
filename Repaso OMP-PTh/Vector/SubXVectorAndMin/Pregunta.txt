@@ -1,0 +1,28 @@
+A partir del programa secuencial que 
+genera aleatóriamente un  entero y un vector de enteros y realiza las siguientes operaciones:
+a) resta el entero a los elementos del vector.
+b) calcula el mínimo.del vector resultante de a). 
+
+Desarrollar:
+    Una versión SubXVectorAndMin-PTh.c que paralelice las operaciones usando PThreads.
+    Una version SubXVectorAndMin-MPI.c que paralelice las operaciones usando MPI.
+    Para la versión MPI se valorará el uso de colectivas e IN_PLACE.l
+
+Se debe adjuntar un solo makefile que permita compilar los tres programas mediante
+    make SubXVectorAndMin
+    make SubXVectorAndMin-PTh
+    make SubXVectorAndMax-MPI
+y que con make clean, borre los ejecutables, .o  y *~.
+
+También se debe adjuntar un Run.sh que ejecute los tres programas para un tamaño de vector de 10 elementos:
+    Secuencial.
+    Paralelo PTh con 1, 2 y 4 hebras.
+    Paralelo MPI con 1, 2 y 4 tareas.
+
+También debe rellenar el README.md que se adjunta, con las instrucciones y preguntas.
+
+El directorio comprimido una vez hecho el "make clean" debe subirse como resultado de la actividad. Abrir con el gestor de archivos la carpeta con el directorio, pulsar botón derecho del ratón y seleccionar "comprimir".
+
+Antes de enviar, esperar a que aparezca el enlace del fichero subido en azul, se debe bajar y verificar que tiene todos los ficheros a enviar y solo entonces debe enviarse.
+
+El envío debe realizarse dentro del tiempo del examen ya que después no se podrá subir. por lo que hay que dejar al menos 5 min del tiempo para realizar el envío.
