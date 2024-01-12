@@ -6,7 +6,7 @@
 #include "argshand.h"
 #include "utils.h"
 
-#define PRINT 0
+#define PRINT 1
 
 //To avoid repeating struct drand48_data.
 typedef struct drand48_data StDrand48Data;
@@ -17,10 +17,10 @@ typedef struct th_args
  int *		pVector;
  int 		Rows;
  int		rows_start;
- int 		n_sub_rows;
  int 		dato;
- int 		Min;
- int 		LocalMin;
+ int 		n_sub_rows;
+ int *		pSum;
+ pthread_mutex_t * pth_Sum_mutex;	//To update *pSum in exclusive way.
  int 		ThreadId;
 } Type_Th_Args;
 
@@ -30,6 +30,7 @@ void ParametersError()
  puts("Options are:");
  puts("\t[ -h To show this help ]");
  puts("\t  -r <n rows>			");
+ puts("\t  -nt <n trheads>			");
  exit(0);
 }
 //-----------------------------------------------------------------------------
@@ -56,12 +57,11 @@ void HowtoShareVector(int ThisTh, int NTh, int NRows, int *start, int *n)
  *n		= n_sub_rows;
  *start	= row_start;
 }
-
 /*---------------------------------------------------------------------------*/
 //Init values of a vector of size Rows.
 void * InitVectorIntPTh(void * pTh_Args)
 { 
- Type_Th_Args * pMyData;
+Type_Th_Args * pMyData;
  pMyData=(Type_Th_Args *) pTh_Args;
  
  int rows_start, rows_end;
@@ -86,27 +86,25 @@ void * InitVectorIntPTh(void * pTh_Args)
      lrand48_r(&RandData,&RandNumber);
      pVector[i]=RandNumber%100;
  }
- 
+     
  pthread_exit((void *)&(pMyData->ThreadId));
 }
 
 /*---------------------------------------------------------------------------*/
-void * SubXvectorAndMin(void * pTh_Args)
+//Adds x to Vector
+void * IntAddVectorInt(void * pTh_Args)
 {
  Type_Th_Args * pMyData;
  pMyData=(Type_Th_Args *) pTh_Args;
+
  int rows_start, rows_end;
  int * pVector;
- int Min;
  int dato;
- int LocalMin;
  
  pVector	= pMyData->pVector;
- Min		= pMyData->Min;
- dato		= pMyData->dato;
  rows_start	= pMyData->rows_start;
  rows_end	= pMyData->rows_start + pMyData->n_sub_rows;
- LocalMin 	= pMyData->LocalMin;
+ dato		= pMyData->dato;
  
  #if (PRINT==1)
  printf("I am thread %d. Doing rows [%d,%d].\n", 
@@ -116,14 +114,8 @@ void * SubXvectorAndMin(void * pTh_Args)
  #endif
  
  for (int i=rows_start;i<rows_end;i++)
-      pVector[i]-=dato;
-      
- LocalMin=pVector[rows_start];
- for (int i=rows_start+1;i<rows_end;i++)
-      LocalMin = LocalMin < pVector[i] ? LocalMin : pVector[i];
+     pVector[i]=pVector[i]+dato;
 
- if (LocalMin < Min) Min = LocalMin;
-  
  pthread_exit((void *)&(pMyData->ThreadId));
 }
 
@@ -131,10 +123,9 @@ void * SubXvectorAndMin(void * pTh_Args)
 int main(int argc, char **argv)
 {
  int Rows;
- int * pVector, x;
+ int x;  //Integer to Add.
+ int * pVector;
  int NThreads; 					//Number of threads.
- int Min=9999;
- int LocalMin=9999;
  pthread_t	*pThreads=NULL; 	//Vector of threads. Dynamic memory. 
  //Vector of structs with data to threads. Dinamic memory allocation.
  Type_Th_Args *pTh_Args=NULL;
@@ -158,7 +149,8 @@ int main(int argc, char **argv)
          exit(1);
         }
     } 
- if (!ExistArg("-nt",argc,argv))
+    
+  if (!ExistArg("-nt",argc,argv))
     {
     fputs("Parameter -nt is neccesary.\n",stderr);
     ParametersError();
@@ -171,13 +163,20 @@ int main(int argc, char **argv)
          puts("NThreads must be > 0 and >= Rows.");
          exit(1);
         }
-    }  
+    } 
     
  #if (PRINT==1)
- printf("SumVectorInt-PTh: Rows=%d, NThreads=%d \n", Rows, NThreads);
+ printf("IntAddVectorInt-PTh: Rows=%d, NThreads=%d \n", Rows, NThreads);
  #endif
-
+ 
  printf("Rows=%d.\n", Rows);
+
+ //Init seed of random number generator
+ srand48(time(NULL));
+ 
+ //Init x
+ x=lrand48()%10;
+ printf("x=%d.\n",x);
 
  //Calloc de Getmen put data to zeroes
  pVector  = (int *) GetMem(Rows,sizeof(int),"Main:Vector");
@@ -187,12 +186,14 @@ int main(int argc, char **argv)
                                     "Main: pThreads");
  pTh_Args = (Type_Th_Args *) GetMem(NThreads, sizeof(Type_Th_Args),
                                     "Main: pTh_Data");
+ 
  //==========================================================================
  //InitVector in parallel.
    for (int t=0; t<NThreads; t++) 
      {
  	  HowtoShareVector(t,NThreads, Rows, &rows_start, &n_sub_rows);
  	  pTh_Args[t].pVector		= pVector;
+ 	  pTh_Args[t].Rows			= Rows;
  	  pTh_Args[t].rows_start	= rows_start;
  	  pTh_Args[t].n_sub_rows	= n_sub_rows;
  	  pTh_Args[t].ThreadId		= t;
@@ -211,25 +212,17 @@ int main(int argc, char **argv)
       #endif
      }
 
- //Init seed of random number generator
- srand48(time(NULL));
- //Init x
- x=lrand48()%9+1;  //+1 to avoid x=0.
- printf("x=%d.\n",x);
- 
  #if (PRINT==1)
- PrintVI(stdout,pVector,Rows,"Vector");
+ PrintVI(stdout,pVector,Rows,"Vector  ");
  #endif
- 
  //===========================================================================
- //Sum the vector in parallel.
+ //the vector in parallel.
 
   for (int t=0; t<NThreads; t++) 
      {
-          pTh_Args[t].Min			= Min;
-          pTh_Args[t].LocalMin			= LocalMin;
-      	  pTh_Args[t].dato			= x;
-      pthread_create(&pThreads[t],NULL,SubXvectorAndMin, (void *)&pTh_Args[t]);
+ 	  pTh_Args[t].dato = x;
+
+      pthread_create(&pThreads[t],NULL,IntAddVectorInt, (void *)&pTh_Args[t]);
      }
 
  //Do the threads join
@@ -241,19 +234,17 @@ int main(int argc, char **argv)
       fflush(stdout);
       #endif
      }
- 
+
  
  #if (PRINT==1)
- PrintVI(stdout,pVector,Rows,"Vector-x");
+ PrintVI(stdout,pVector,Rows,"Vector+x");
  #endif
  
- printf("Min=%d.\n",Min);
-
  //Free allocated memory
  free((void *)pTh_Args);
  free((void *)pThreads);
  free((void *)pVector);
-
+ 
  return 0;
 }
 
